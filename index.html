@@ -1,11 +1,454 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mi Formulario</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Flag Globe - World Map with National Flags</title>
+  
+  <!-- Tailwind CSS for styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- FontAwesome Icons -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Three.js and Globe.gl dependencies -->
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/globe.gl@2.27.2/dist/globe.gl.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #030712;
+      color: #f3f4f6;
+    }
+    #globeViz {
+      width: 100vw;
+      height: 100vh;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+    /* Custom Scrollbar for Info Panel */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(59, 130, 246, 0.5);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(59, 130, 246, 0.8);
+    }
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+  </style>
 </head>
-<body>
-    <h1>Cambios dentro de visual studio, primer</h1>
+<body class="relative min-h-screen overflow-hidden select-none">
+
+  <!-- 3D Globe Container -->
+  <div id="globeViz"></div>
+
+  <!-- Header Overlay -->
+  <header class="absolute top-4 left-4 right-4 md:left-6 md:right-6 z-10 flex justify-between items-center pointer-events-none">
+    <div class="glass-panel px-4 py-2.5 rounded-2xl flex items-center space-x-3 pointer-events-auto shadow-2xl">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/30">
+        <i class="fa-solid me-0 fa-earth-americas text-white text-lg"></i>
+      </div>
+      <div>
+        <h1 class="text-base font-bold bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-slate-400">
+          World Flag Globe 3D
+        </h1>
+        <p class="text-xs text-slate-400">Interactive National Flag Map</p>
+      </div>
+    </div>
+
+    <!-- Quick Stats / Controls Badge -->
+    <div class="hidden sm:flex glass-panel px-4 py-2 rounded-2xl items-center space-x-4 pointer-events-auto text-xs text-slate-300">
+      <div class="flex items-center space-x-1.5">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span id="countryCountText">Loading countries...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Floating UI Controls (Right side) -->
+  <div class="absolute right-4 top-24 md:right-6 z-10 flex flex-col space-y-2 pointer-events-auto">
+    <button id="btnRotate" title="Toggle Auto-Rotation" class="glass-panel w-11 h-11 rounded-2xl flex items-center justify-center text-slate-200 hover:text-white hover:bg-slate-800/80 transition-all duration-200 active:scale-95 shadow-lg">
+      <i class="fa-solid fa-rotate text-base"></i>
+    </button>
+    <button id="btnZoomIn" title="Zoom In" class="glass-panel w-11 h-11 rounded-2xl flex items-center justify-center text-slate-200 hover:text-white hover:bg-slate-800/80 transition-all duration-200 active:scale-95 shadow-lg">
+      <i class="fa-solid fa-plus text-base"></i>
+    </button>
+    <button id="btnZoomOut" title="Zoom Out" class="glass-panel w-11 h-11 rounded-2xl flex items-center justify-center text-slate-200 hover:text-white hover:bg-slate-800/80 transition-all duration-200 active:scale-95 shadow-lg">
+      <i class="fa-solid fa-minus text-base"></i>
+    </button>
+    <button id="btnReset" title="Reset Camera" class="glass-panel w-11 h-11 rounded-2xl flex items-center justify-center text-slate-200 hover:text-white hover:bg-slate-800/80 transition-all duration-200 active:scale-95 shadow-lg">
+      <i class="fa-solid fa-house text-base"></i>
+    </button>
+  </div>
+
+  <!-- Country Search & Info Panel (Bottom Left) -->
+  <div class="absolute bottom-4 left-4 right-4 md:left-6 md:right-auto md:w-96 z-10 pointer-events-auto">
+    <div class="glass-panel p-4 rounded-3xl shadow-2xl space-y-3">
+      
+      <!-- Search Input -->
+      <div class="relative">
+        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+        <input 
+          type="text" 
+          id="searchInput" 
+          placeholder="Search country (e.g., Chile, Japan, France)..." 
+          class="w-full bg-slate-900/80 border border-slate-700/60 rounded-xl pl-10 pr-4 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition"
+        />
+        <div id="searchResults" class="hidden absolute left-0 right-0 top-full mt-1 bg-slate-900/95 border border-slate-700/80 rounded-xl max-h-48 overflow-y-auto z-20 shadow-xl divide-y divide-slate-800"></div>
+      </div>
+
+      <!-- Selected Country Info Display -->
+      <div id="infoCard" class="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-3 flex items-center space-x-4">
+        <div class="w-14 h-10 rounded-lg overflow-hidden bg-slate-800 border border-slate-700/50 flex-shrink-0 flex items-center justify-center shadow">
+          <img id="infoFlag" src="https://flagcdn.com/w160/un.png" alt="Flag" class="w-full h-full object-cover">
+        </div>
+        <div class="flex-1 min-w-0">
+          <h2 id="infoName" class="text-sm font-bold text-white truncate">Click a country</h2>
+          <p id="infoCode" class="text-xs text-slate-400">Hover or click on the globe to inspect</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Instruction Helper Banner -->
+  <div class="absolute top-20 left-1/2 -translate-x-1/2 z-0 pointer-events-none hidden md:block">
+    <div class="bg-slate-900/40 backdrop-blur-md border border-white/5 px-4 py-1.5 rounded-full text-[11px] text-slate-400 shadow">
+      <i class="fa-solid fa-hand-pointer mr-1.5 text-blue-400"></i> Drag to rotate • Scroll to zoom • Click country to focus
+    </div>
+  </div>
+
+  <!-- Loading Screen -->
+  <div id="loadingOverlay" class="absolute inset-0 z-50 bg-slate-950 flex flex-col items-center justify-center space-y-4 transition-opacity duration-500">
+    <div class="relative w-16 h-16">
+      <div class="absolute inset-0 rounded-full border-4 border-blue-500/20"></div>
+      <div class="absolute inset-0 rounded-full border-4 border-blue-500 border-t-transparent animate-spin"></div>
+    </div>
+    <div class="text-center">
+      <p class="text-sm font-semibold text-slate-200">Generating Flag Textures...</p>
+      <p class="text-xs text-slate-500 mt-1">Mapping national flags onto 3D spherical geometries</p>
+    </div>
+  </div>
+
+  <script>
+    // --- Application State ---
+    let world;
+    let countriesData = [];
+    let isAutoRotating = true;
+    let selectedCountry = null;
+    const countryTextureCache = new Map();
+
+    // Mapping 2-letter ISO codes (ISO 3166-1 alpha-2) for FlagCDN
+    // GeoJSON uses ISO_A2, ISO_A3 or ADM0_A3
+    const iso2Map = {
+      "AFG":"af","ALB":"al","DZA":"dz","AND":"ad","AGO":"ao","ARG":"ar","ARM":"am","AUS":"au","AUT":"at","AZE":"az",
+      "BHS":"bs","BHR":"bh","BGD":"bd","BRB":"bb","BLR":"by","BEL":"be","BLZ":"bz","BEN":"bj","BTN":"bt","BOL":"bo",
+      "BIH":"ba","BWA":"bw","BRA":"br","BRN":"bn","BGR":"bg","BFA":"bf","BDI":"bi","KHM":"kh","CMR":"cm","CAN":"ca",
+      "CPV":"cv","CAF":"cf","TCD":"td","CHL":"cl","CHN":"cn","COL":"co","COM":"km","COG":"cg","COD":"cd","CRI":"cr",
+      "HRV":"hr","CUB":"cu","CYP":"cy","CZE":"cz","DNK":"dk","DJI":"dj","DMA":"dm","DOM":"do","ECU":"ec","EGY":"eg",
+      "SLV":"sv","GNQ":"gq","ERI":"er","EST":"ee","ETH":"et","FJI":"fj","FIN":"fi","FRA":"fr","GAB":"ga","GMB":"gm",
+      "GEO":"ge","DEU":"de","GHA":"gh","GRC":"gr","GRD":"gd","GTM":"gt","GIN":"gn","GNB":"gw","GUY":"gy","HTI":"ht",
+      "HND":"hn","HUN":"hu","ISL":"is","IND":"in","IDN":"id","IRN":"ir","IRQ":"iq","IRL":"ie","ISR":"il","ITA":"it",
+      "JAM":"jm","JPN":"jp","JOR":"jo","KAZ":"kz","KEN":"ke","KIR":"ki","PRK":"kp","KOR":"kr","KWT":"kw","KGZ":"kg",
+      "LAO":"la","LVA":"lv","LBN":"lb","LSO":"ls","LBR":"lr","LBY":"ly","LIE":"li","LTU":"lt","LUX":"lu","MKD":"mk",
+      "MDG":"mg","MWI":"mw","MYS":"my","MDV":"mv","MLI":"ml","MLT":"mt","MHL":"mh","MRT":"mr","MUS":"mu","MEX":"mx",
+      "FSM":"fm","MDA":"md","MCO":"mc","MNG":"mn","MNE":"me","MAR":"ma","MOZ":"mz","MMR":"mm","NAM":"na","NRU":"nr",
+      "NPL":"np","NLD":"nl","NZL":"nz","NIC":"ni","NER":"ne","NGA":"ng","NOR":"no","OMN":"om","PAK":"pk","PWL":"pw",
+      "PAN":"pa","PNG":"pg","PRY":"py","PER":"pe","PHL":"ph","POL":"pl","PRT":"pt","QAT":"qa","ROU":"ro","RUS":"ru",
+      "RWA":"rw","KNA":"kn","LCA":"lc","VCT":"vc","WSM":"ws","SMR":"sm","STP":"st","SAU":"sa","SEN":"sn","SRB":"rs",
+      "SYC":"sc","SLE":"sl","SGP":"sg","SVK":"sk","SVN":"si","SLB":"sb","SOM":"so","ZAF":"za","ESP":"es","LKA":"lk",
+      "SDN":"sd","SUR":"sr","SWZ":"sz","SWE":"se","CHE":"ch","SYR":"sy","TWN":"tw","TJK":"tj","TZA":"tz","THA":"th",
+      "TLS":"tl","TGO":"tg","TON":"to","TTO":"tt","TUN":"tn","TUR":"tr","TKM":"tm","TUV":"tv","UGA":"ug","UKR":"ua",
+      "ARE":"ae","GBR":"gb","USA":"us","URY":"uy","UZB":"uz","VUT":"vu","VEN":"ve","VNM":"vn","YEM":"ye","ZMB":"zm","ZWE":"zw"
+    };
+
+    // Canvas generator to create texture from flag image
+    function getFlagCanvasTexture(isoCode, callback) {
+      if (!isoCode) return null;
+      const code = isoCode.toLowerCase();
+      
+      if (countryTextureCache.has(code)) {
+        return countryTextureCache.get(code);
+      }
+
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.src = `https://flagcdn.com/w640/${code}.png`;
+
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+
+        // Draw image stretched to canvas (maps cleanly onto country polygons)
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        
+        countryTextureCache.set(code, texture);
+        if (callback) callback(texture);
+      };
+
+      img.onerror = () => {
+        // Fallback texture if flag fails to load
+        const canvas = document.createElement('canvas');
+        canvas.width = 64; canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#3b82f6'; ctx.fillRect(0, 0, 64, 64);
+        const texture = new THREE.CanvasTexture(canvas);
+        countryTextureCache.set(code, texture);
+        if (callback) callback(texture);
+      };
+    }
+
+    // Initialize the Globe
+    function initGlobe() {
+      const container = document.getElementById('globeViz');
+
+      world = Globe()
+        (container)
+        .globeImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png') // Ocean / background sphere
+        .backgroundColor('#030712')
+        .showAtmosphere(true)
+        .atmosphereColor('#3b82f6')
+        .atmosphereDayScale(0.18)
+        .polygonAltitude(0.015)
+        .polygonCapColor(feat => {
+          // Fallback color while texture loads or if hovered
+          return feat === selectedCountry ? 'rgba(59, 130, 246, 0.6)' : 'rgba(30, 41, 59, 0.8)';
+        })
+        .polygonSideColor(() => 'rgba(15, 23, 42, 0.8)')
+        .polygonStrokeColor(() => '#0f172a')
+        .polygonLabel(({ properties: d }) => {
+          const iso3 = d.ISO_A3 || d.ADM0_A3;
+          const iso2 = iso2Map[iso3] || (d.ISO_A2 ? d.ISO_A2.toLowerCase() : null);
+          const flagUrl = iso2 ? `https://flagcdn.com/w40/${iso2}.png` : '';
+          
+          return `
+            <div class="glass-panel px-3 py-2 rounded-xl text-xs flex items-center space-x-2.5 shadow-xl border border-white/10">
+              ${flagUrl ? `<img src="${flagUrl}" class="w-6 h-4 object-cover rounded shadow-sm border border-white/20"/>` : ''}
+              <div>
+                <div class="font-bold text-white">${d.NAME || d.ADMIN}</div>
+                <div class="text-[10px] text-slate-400">Code: ${iso3 || 'N/A'}</div>
+              </div>
+            </div>
+          `;
+        })
+        .onPolygonHover(hoverD => {
+          world.polygonAltitude(d => d === hoverD || d === selectedCountry ? 0.03 : 0.015);
+        })
+        .onPolygonClick(polygon => {
+          if (!polygon) return;
+          selectCountry(polygon);
+        });
+
+      // Enable Auto-Rotation & Controls
+      world.controls().autoRotate = true;
+      world.controls().autoRotateSpeed = 0.6;
+      world.controls().enableZoom = true;
+
+      // Adjust camera initial view
+      world.pointOfView({ lat: 15, lng: 10, altitude: 2.3 });
+
+      // Load GeoJSON Country Data
+      fetch('https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson')
+        .then(res => res.json())
+        .then(geojson => {
+          countriesData = geojson.features;
+          document.getElementById('countryCountText').innerText = `${countriesData.length} Countries Loaded`;
+
+          // Assign polygons
+          world.polygonsData(countriesData);
+
+          // Apply Flag Material Textures onto 3D Country Polygons
+          world.polygonCapMaterial(feat => {
+            const iso3 = feat.properties.ISO_A3 || feat.properties.ADM0_A3;
+            const iso2 = iso2Map[iso3] || (feat.properties.ISO_A2 ? feat.properties.ISO_A2.toLowerCase() : null);
+
+            const material = new THREE.MeshStandardMaterial({
+              roughness: 0.5,
+              metalness: 0.1,
+              side: THREE.DoubleSide
+            });
+
+            if (iso2) {
+              getFlagCanvasTexture(iso2, texture => {
+                material.map = texture;
+                material.needsUpdate = true;
+              });
+            } else {
+              material.color = new THREE.Color('#334155');
+            }
+
+            return material;
+          });
+
+          // Hide loading screen
+          const loader = document.getElementById('loadingOverlay');
+          loader.classList.add('opacity-0');
+          setTimeout(() => loader.style.display = 'none', 500);
+        })
+        .catch(err => {
+          console.error("Error loading country data:", err);
+          document.getElementById('countryCountText').innerText = "Failed to load geometries";
+        });
+    }
+
+    // Select country and focus camera
+    function selectCountry(countryFeat) {
+      selectedCountry = countryFeat;
+      const props = countryFeat.properties;
+      const name = props.NAME || props.ADMIN;
+      const iso3 = props.ISO_A3 || props.ADM0_A3;
+      const iso2 = iso2Map[iso3] || (props.ISO_A2 ? props.ISO_A2.toLowerCase() : null);
+
+      // Update UI Card
+      document.getElementById('infoName').innerText = name;
+      document.getElementById('infoCode').innerText = `ISO Code: ${iso3 || 'N/A'}`;
+      
+      const flagImg = document.getElementById('infoFlag');
+      if (iso2) {
+        flagImg.src = `https://flagcdn.com/w160/${iso2}.png`;
+      } else {
+        flagImg.src = 'https://placehold.co/160x100/1e293b/ffffff?text=No+Flag';
+      }
+
+      // Calculate centroid of polygon to focus camera
+      let coords = [];
+      if (countryFeat.geometry.type === 'Polygon') {
+        coords = countryFeat.geometry.coordinates[0];
+      } else if (countryFeat.geometry.type === 'MultiPolygon') {
+        coords = countryFeat.geometry.coordinates[0][0];
+      }
+
+      if (coords && coords.length > 0) {
+        let avgLng = 0, avgLat = 0;
+        coords.forEach(c => { avgLng += c[0]; avgLat += c[1]; });
+        avgLng /= coords.length;
+        avgLat /= coords.length;
+
+        world.pointOfView({ lat: avgLat, lng: avgLng, altitude: 1.5 }, 1200);
+      }
+    }
+
+    // Setup Controls and Events
+    function setupUI() {
+      // Auto rotate toggle
+      const btnRotate = document.getElementById('btnRotate');
+      btnRotate.addEventListener('click', () => {
+        isAutoRotating = !isAutoRotating;
+        world.controls().autoRotate = isAutoRotating;
+        btnRotate.classList.toggle('text-blue-400', isAutoRotating);
+      });
+      btnRotate.classList.add('text-blue-400');
+
+      // Zoom In
+      document.getElementById('btnZoomIn').addEventListener('click', () => {
+        const currentPov = world.pointOfView();
+        world.pointOfView({ ...currentPov, altitude: Math.max(currentPov.altitude - 0.5, 0.5) }, 400);
+      });
+
+      // Zoom Out
+      document.getElementById('btnZoomOut').addEventListener('click', () => {
+        const currentPov = world.pointOfView();
+        world.pointOfView({ ...currentPov, altitude: Math.min(currentPov.altitude + 0.5, 4.0) }, 400);
+      });
+
+      // Reset View
+      document.getElementById('btnReset').addEventListener('click', () => {
+        world.pointOfView({ lat: 15, lng: 10, altitude: 2.3 }, 1000);
+      });
+
+      // Search Country
+      const searchInput = document.getElementById('searchInput');
+      const searchResults = document.getElementById('searchResults');
+
+      searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase().trim();
+        if (!query) {
+          searchResults.classList.add('hidden');
+          return;
+        }
+
+        const matches = countriesData.filter(f => {
+          const name = (f.properties.NAME || f.properties.ADMIN || '').toLowerCase();
+          return name.includes(query);
+        }).slice(0, 6);
+
+        if (matches.length > 0) {
+          searchResults.innerHTML = matches.map(f => {
+            const name = f.properties.NAME || f.properties.ADMIN;
+            const iso3 = f.properties.ISO_A3 || f.properties.ADM0_A3;
+            const iso2 = iso2Map[iso3];
+            return `
+              <div class="px-3 py-2 text-xs text-slate-200 hover:bg-blue-600/30 cursor-pointer flex items-center space-x-2 transition" data-code="${iso3}">
+                ${iso2 ? `<img src="https://flagcdn.com/w40/${iso2}.png" class="w-5 h-3.5 object-cover rounded shadow-sm"/>` : ''}
+                <span class="font-medium">${name}</span>
+              </div>
+            `;
+          }).join('');
+
+          searchResults.classList.remove('hidden');
+
+          // Add click handlers for results
+          searchResults.querySelectorAll('div[data-code]').forEach(el => {
+            el.addEventListener('click', () => {
+              const code = el.getAttribute('data-code');
+              const found = countriesData.find(f => (f.properties.ISO_A3 || f.properties.ADM0_A3) === code);
+              if (found) {
+                selectCountry(found);
+                searchResults.classList.add('hidden');
+                searchInput.value = found.properties.NAME || found.properties.ADMIN;
+              }
+            });
+          });
+
+        } else {
+          searchResults.innerHTML = `<div class="px-3 py-2 text-xs text-slate-500">No countries found</div>`;
+          searchResults.classList.remove('hidden');
+        }
+      });
+
+      // Close search results on outside click
+      document.addEventListener('click', (e) => {
+        if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+          searchResults.classList.add('hidden');
+        }
+      });
+
+      // Handle window resize
+      window.addEventListener('resize', () => {
+        world.width(window.innerWidth);
+        world.height(window.innerHeight);
+      });
+    }
+
+    // Start App on Window Load
+    window.onload = () => {
+      initGlobe();
+      setupUI();
+    };
+  </script>
 </body>
 </html>
